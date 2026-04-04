@@ -8,14 +8,14 @@
 
 ## 目录
 
-- [快速开始](#快速开�?
-- [Client 客户端](#client-客户�?
+- [快速开始](#快速开始)
+- [Client 客户端](#client-客户端)
 - [Result 结果对象](#result-结果对象)
 - [用户管理接口](#用户管理接口)
 - [卡密管理接口](#卡密管理接口)
 - [数据管理接口](#数据管理接口)
-- [云变量接口](#云变量接�?
-- [云计算接口](#云计算接�?
+- [云变量接口](#云变量接口)
+- [云计算接口](#云计算接口)
 - [系统接口](#系统接口)
 - [设备标识生成](#设备标识生成)
 - [加密工具函数](#加密工具函数)
@@ -23,7 +23,8 @@
 
 ---
 
-## 快速开�?
+## 快速开始
+
 ### 安装
 
 ```bash
@@ -42,7 +43,8 @@ import (
 )
 
 func main() {
-    // 创建客户�?    client := donghao.NewClient("http://your-domain.com", 1)
+    // 创建客户端
+    client := donghao.NewClient("http://your-domain.com", 1)
     client.SetTimeout(30)
     
     // 配置加密（可选）
@@ -67,10 +69,12 @@ func main() {
 
 ---
 
-## Client 客户�?
+## Client 客户端
+
 ### NewClient
 
-创建一个新的API客户�?
+创建一个新的API客户端
+
 ```go
 func NewClient(baseURL string, appID int) *Client
 ```
@@ -80,7 +84,8 @@ func NewClient(baseURL string, appID int) *Client
 - `appID`: 软件ID，从管理后台获取
 
 **返回**:
-- `*Client`: 客户端实�?
+- `*Client`: 客户端实例
+
 **示例**:
 ```go
 client := donghao.NewClient("http://your-domain.com", 1)
@@ -97,10 +102,12 @@ func (c *Client) SetTimeout(seconds int)
 ```
 
 **参数**:
-- `seconds`: 超时时间（秒�?
+- `seconds`: 超时时间（秒）
+
 **示例**:
 ```go
-client.SetTimeout(30) // 30秒超�?```
+client.SetTimeout(30) // 30秒超时
+```
 
 ---
 
@@ -134,7 +141,8 @@ func (c *Client) SetSignConfig(appKey, template string, needSign bool)
 **参数**:
 - `appKey`: 应用密钥
 - `template`: 签名模板，如 `"[data]123[key]456"`
-- `needSign`: 是否需要签�?
+- `needSign`: 是否需要签名
+
 **示例**:
 ```go
 client.SetSignConfig("hbjBpRbXqNnMwbS3", "[data]123[key]456", true)
@@ -151,7 +159,8 @@ func (c *Client) SetHeartbeatInterval(seconds int)
 ```
 
 **参数**:
-- `seconds`: 心跳间隔（秒），默认60�?
+- `seconds`: 心跳间隔（秒），默认60秒
+
 **示例**:
 ```go
 client.SetHeartbeatInterval(60)
@@ -168,12 +177,14 @@ func (c *Client) GetToken() string
 ```
 
 **返回**:
-- `string`: 当前Token，未登录时返回空字符�?
+- `string`: 当前Token，未登录时返回空字符串
+
 ---
 
 ### GetCurrentUser
 
-获取当前登录用户�?
+获取当前登录用户名
+
 ```go
 func (c *Client) GetCurrentUser() string
 ```
@@ -187,7 +198,8 @@ func (c *Client) GetCurrentUser() string
 
 ### IsSuccess
 
-检查操作是否成�?
+检查操作是否成功
+
 ```go
 func (r *Result) IsSuccess() bool
 ```
@@ -239,25 +251,29 @@ func (r *Result) GetData() (string, error)
 
 ### GetGroupData
 
-获取解密后的用户组数�?
+获取解密后的用户组数据
+
 ```go
 func (r *Result) GetGroupData() (string, error)
 ```
 
 **返回**:
-- `string`: 解密后的用户组数�?- `error`: 解密错误
+- `string`: 解密后的用户组数据
+- `error`: 解密错误
 
 ---
 
 ### GetVariableValue
 
-获取云变量�?
+获取云变量值
+
 ```go
 func (r *Result) GetVariableValue() (string, error)
 ```
 
 **返回**:
-- `string`: 云变量�?- `error`: 获取错误
+- `string`: 云变量值
+- `error`: 获取错误
 
 ---
 
@@ -285,8 +301,10 @@ func (c *Client) Login(user, pwd, ver, mac, ip, clientid string) (*Result, error
 ```
 
 **参数**:
-- `user`: 用户�?- `pwd`: 密码
-- `ver`: 软件版本�?- `mac`: 机器�?MAC地址
+- `user`: 用户名
+- `pwd`: 密码
+- `ver`: 软件版本号
+- `mac`: 机器码/MAC地址
 - `ip`: 客户端IP地址
 - `clientid`: 客户端ID
 
@@ -314,7 +332,8 @@ func (c *Client) LoginCard(card, ver, mac, ip, clientid string) (*Result, error)
 
 **参数**:
 - `card`: 卡密
-- `ver`: 软件版本�?- `mac`: 机器�?MAC地址
+- `ver`: 软件版本号
+- `mac`: 机器码/MAC地址
 - `ip`: 客户端IP地址
 - `clientid`: 客户端ID
 
@@ -341,12 +360,15 @@ func (c *Client) Reg(user, pwd, card, userqq, email, tjr, ver, mac, ip, clientid
 ```
 
 **参数**:
-- `user`: 用户�?- `pwd`: 密码
+- `user`: 用户名
+- `pwd`: 密码
 - `card`: 卡密（可选）
 - `userqq`: QQ号（可选）
 - `email`: 邮箱（可选）
 - `tjr`: 推荐人（可选）
-- `ver`: 软件版本�?- `mac`: 机器�?- `ip`: IP地址
+- `ver`: 软件版本号
+- `mac`: 机器码
+- `ip`: IP地址
 - `clientid`: 客户端ID
 
 **示例**:
@@ -358,7 +380,8 @@ result, err := client.Reg("newuser", "password", "CARD-123", "123456", "user@exa
 
 ### Logout
 
-用户退出登�?
+用户退出登录
+
 ```go
 func (c *Client) Logout(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -408,7 +431,8 @@ result, err := client.Uppwd("testuser", "oldpwd", "newpwd", "1.0", "mac", "ip", 
 
 ### Heartbeat
 
-发送心�?
+发送心跳
+
 ```go
 func (c *Client) Heartbeat(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -420,8 +444,10 @@ result, err := client.Heartbeat("testuser", client.GetToken(), "1.0", "mac", "ip
 
 ---
 
-### StartAutoHeartbeat（已禁用�?
-> ⚠️ **注意**: 自动心跳功能存在问题，已禁用。请使用手动心跳 `Heartbeat()` 方法代替�?
+### StartAutoHeartbeat（已禁用）
+
+> ⚠️ **注意**: 自动心跳功能存在问题，已禁用。请使用手动心跳 `Heartbeat()` 方法代替。
+
 启动自动心跳
 
 ```go
@@ -435,7 +461,8 @@ result, err := client.Heartbeat("testuser", client.GetToken(), "1.0", "mac", "ip
 
 ---
 
-### StopAutoHeartbeat（已禁用�?
+### StopAutoHeartbeat（已禁用）
+
 停止自动心跳
 
 ```go
@@ -448,21 +475,25 @@ result, err := client.Heartbeat("testuser", client.GetToken(), "1.0", "mac", "ip
 
 ### Recharge
 
-卡密充�?
+卡密充值
+
 ```go
 func (c *Client) Recharge(user, card, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **参数**:
-- `user`: 用户�?- `card`: 卡密
-- `ver`: 软件版本�?- `mac`: 机器�?- `ip`: IP地址
+- `user`: 用户名
+- `card`: 卡密
+- `ver`: 软件版本号
+- `mac`: 机器码
+- `ip`: IP地址
 - `clientid`: 客户端ID
 
 **示例**:
 ```go
 result, err := client.Recharge("testuser", "YKUvGvYSuVFFTp41T1WO", "1.0", "mac", "ip", "client001")
 if result.IsSuccess() {
-    fmt.Println("充值成�?)
+    fmt.Println("充值成功")
 }
 ```
 
@@ -534,7 +565,8 @@ result, err := client.SetUdata("testuser", client.GetToken(), jsonData, "1.0", "
 
 ### GetUdata2
 
-获取用户数据2（第二数据区�?
+获取用户数据2（第二数据区）
+
 ```go
 func (c *Client) GetUdata2(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -543,17 +575,20 @@ func (c *Client) GetUdata2(user, tokenid, ver, mac, ip, clientid string) (*Resul
 
 ### SetUdata2
 
-设置用户数据2（第二数据区�?
+设置用户数据2（第二数据区）
+
 ```go
 func (c *Client) SetUdata2(user, tokenid, udata, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
 
-## 云变量接�?
+## 云变量接口
+
 ### GetVariable
 
-获取云变�?
+获取云变量
+
 ```go
 func (c *Client) GetVariable(user, tokenid, cloudkey, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -563,7 +598,7 @@ func (c *Client) GetVariable(user, tokenid, cloudkey, ver, mac, ip, clientid str
 result, err := client.GetVariable("testuser", client.GetToken(), "config_key", "1.0", "mac", "ip", "client001")
 if result.IsSuccess() {
     value, _ := result.GetVariableValue()
-    fmt.Println("变量�?", value)
+    fmt.Println("变量值:", value)
 }
 ```
 
@@ -571,7 +606,8 @@ if result.IsSuccess() {
 
 ### SetVariable
 
-设置云变�?
+设置云变量
+
 ```go
 func (c *Client) SetVariable(user, tokenid, cloudkey, cloudvalue, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -585,7 +621,8 @@ result, err := client.SetVariable("testuser", client.GetToken(), "config_key", `
 
 ### DelVariable
 
-删除云变�?
+删除云变量
+
 ```go
 func (c *Client) DelVariable(user, tokenid, cloudkey, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -602,10 +639,12 @@ func (c *Client) Constant(user, tokenid, cloudkey, ver, mac, ip, clientid string
 
 ---
 
-## 云计算接�?
+## 云计算接口
+
 ### Func
 
-调用云计算函数（需登录�?
+调用云计算函数（需登录）
+
 ```go
 func (c *Client) Func(user, tokenid, fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -622,7 +661,8 @@ if result.IsSuccess() {
 
 ### Func2
 
-调用云计算函�?（无需登录�?
+调用云计算函数（无需登录）
+
 ```go
 func (c *Client) Func2(fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -636,7 +676,8 @@ result, err := client.Func2("jia", "1,2", "1.0", "mac", "ip", "client001")
 
 ### CallPHP
 
-调用PHP函数（需登录�?
+调用PHP函数（需登录）
+
 ```go
 func (c *Client) CallPHP(user, tokenid, fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -645,7 +686,8 @@ func (c *Client) CallPHP(user, tokenid, fun, para, ver, mac, ip, clientid string
 
 ### CallPHP2
 
-调用PHP函数2（无需登录�?
+调用PHP函数2（无需登录）
+
 ```go
 func (c *Client) CallPHP2(fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -656,7 +698,8 @@ func (c *Client) CallPHP2(fun, para, ver, mac, ip, clientid string) (*Result, er
 
 ### Init
 
-软件初始�?
+软件初始化
+
 ```go
 func (c *Client) Init(ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -696,7 +739,8 @@ func (c *Client) Ver(ver, mac, ip, clientid string) (*Result, error)
 
 ### GetBlack
 
-查询黑名�?
+查询黑名单
+
 ```go
 func (c *Client) GetBlack(bType, bData string) (*Result, error)
 ```
@@ -714,7 +758,8 @@ result, err := client.GetBlack("ip", "192.168.1.1")
 
 ### SetBlack
 
-设置黑名�?
+设置黑名单
+
 ```go
 func (c *Client) SetBlack(bType, bData, bBz, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -743,7 +788,8 @@ func (c *Client) DeductPoints(user, tokenid string, sl int, ver, mac, ip, client
 
 ### Bindreferrer
 
-绑定推荐�?
+绑定推荐人
+
 ```go
 func (c *Client) Bindreferrer(user, pwd, tjr, ver, mac, ip, clientid string) (*Result, error)
 ```
@@ -764,7 +810,7 @@ func (c *Client) Relay(params map[string]string, ver, mac, ip, clientid string) 
 
 ### GetMachineCode
 
-获取机器唯一码（跨平台）�?**推荐**
+获取机器唯一码（跨平台）**推荐**
 
 ```go
 func GetMachineCode() (string, error)
@@ -773,42 +819,47 @@ func GetMachineCode() (string, error)
 **说明**:
 - **Windows**: 基于CPU序列号、主板序列号、硬盘序列号、MAC地址、BIOS信息
 - **Android**: 基于设备序列号、设备型号、品牌、主板等信息
-- **其他系统**: 基于系统信息生成备用�?- 同一台设备每次生成的码相�?- 已集成到SDK中，无需额外文件
-- **采用双层MD5加密，增强安全�?*
+- **其他系统**: 基于系统信息生成备用
+- 同一台设备每次生成的码相同
+- 已集成到SDK中，无需额外文件
+- **采用双层MD5加密，增强安全性**
 
 **加密流程**:
 ```
-硬件信息 �?MD5(第一�? �?中间�?�?MD5(第二�? �?最终机器码
+硬件信息 -> MD5(第一层) -> 中间串 -> MD5(第二层) -> 最终机器码
 ```
 
 **返回**:
-- `string`: 机器唯一码，格式 `XXXX-XXXX-XXXX-XXXX`�?6位十六进制）
+- `string`: 机器唯一码，格式 `XXXX-XXXX-XXXX-XXXX`（16位十六进制）
 - `error`: 获取失败时的错误信息
 
 **示例**:
 ```go
 code, err := donghao.GetMachineCode()
 if err != nil {
-    log.Fatal("获取机器码失�?", err)
+    log.Fatal("获取机器码失败:", err)
 }
-fmt.Println("机器�?", code) // 输出: A3F9-B2C1-D8E5-A7B4
+fmt.Println("机器码:", code) // 输出: A3F9-B2C1-D8E5-A7B4
 ```
 
 ---
 
 ### GetHardwareID
 
-获取硬件ID（跨平台�?
+获取硬件ID（跨平台）
+
 ```go
 func GetHardwareID() (string, error)
 ```
 
 **说明**:
 - **Windows**: 包含CPU、主板、硬盘、MAC地址、BIOS、系统UUID
-- **Android**: 包含设备序列号、型号、品牌、主板、制造商、硬件信�?- **其他系统**: 基于系统信息生成
-- 已集成到SDK�?
+- **Android**: 包含设备序列号、型号、品牌、主板、制造商、硬件信息
+- **其他系统**: 基于系统信息生成
+- 已集成到SDK中
+
 **返回**:
-- `string`: 硬件ID，格�?`HWID-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`
+- `string`: 硬件ID，格式 `HWID-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`
 - `error`: 获取失败时的错误信息
 
 **示例**:
@@ -824,7 +875,8 @@ fmt.Println("硬件ID:", hwid)
 
 ### GetHardwareInfo
 
-获取详细硬件信息（跨平台�?
+获取详细硬件信息（跨平台）
+
 ```go
 func GetHardwareInfo() (map[string]string, error)
 ```
@@ -833,7 +885,8 @@ func GetHardwareInfo() (map[string]string, error)
 - **Windows**: 返回 cpu, board, disk, mac, bios, uuid
 - **Android**: 返回 serialno, device, brand, model, board, manufacturer, hardware, android_id
 - **其他系统**: 返回 os, arch, hostname, cpu_num
-- 已集成到SDK�?
+- 已集成到SDK中
+
 **返回**:
 - `map[string]string`: 硬件信息map
 - `error`: 获取失败时的错误信息
@@ -860,30 +913,37 @@ func GetMachineCodeSafe() string
 ```
 
 **说明**:
-- 优先尝试获取硬件机器码（Windows/Android�?- 如果失败，则基于系统信息生成备用�?- 不会返回错误，始终返回一个标识符
-- 已集成到SDK�?
+- 优先尝试获取硬件机器码（Windows/Android）
+- 如果失败，则基于系统信息生成备用
+- 不会返回错误，始终返回一个标识符
+- 已集成到SDK中
+
 **返回**:
-- `string`: 机器�?
+- `string`: 机器码
+
 **示例**:
 ```go
 code := donghao.GetMachineCodeSafe()
-fmt.Println("机器�?", code)
+fmt.Println("机器码:", code)
 ```
 
 ---
 
 ### GenerateClientID
 
-生成客户端唯一标识符（软件生成�?
+生成客户端唯一标识符（软件生成）
+
 ```go
 func GenerateClientID() string
 ```
 
 **说明**:
-- 基于时间戳和随机数生�?- 每次调用生成的ID不同
-- 适用于临时标�?
+- 基于时间戳和随机数生成
+- 每次调用生成的ID不同
+- 适用于临时标识
+
 **返回**:
-- `string`: 客户端ID，格�?`CLIENT-XXXXXXXX-XXXXXXXX`
+- `string`: 客户端ID，格式 `CLIENT-XXXXXXXX-XXXXXXXX`
 
 **示例**:
 ```go
@@ -895,18 +955,21 @@ fmt.Println("客户端ID:", clientID) // CLIENT-A3F9B2C1-D8E5A7B4
 
 ### GenerateDeviceID
 
-生成设备唯一标识符（基于硬件，跨平台�?
+生成设备唯一标识符（基于硬件，跨平台）
+
 ```go
 func GenerateDeviceID() (string, error)
 ```
 
 **说明**:
-- 基于真实硬件信息生成设备唯一标识�?- **Windows**: 使用CPU、主板、硬盘等硬件信息
+- 基于真实硬件信息生成设备唯一标识
+- **Windows**: 使用CPU、主板、硬盘等硬件信息
 - **Android**: 使用设备序列号、型号等信息
 - 同一台设备每次生成的ID相同
-- 已集成到SDK�?
+- 已集成到SDK中
+
 **返回**:
-- `string`: 设备ID，格�?`XXXX-XXXX-XXXX-XXXX`
+- `string`: 设备ID，格式 `XXXX-XXXX-XXXX-XXXX`
 - `error`: 获取失败时的错误信息
 
 **示例**:
@@ -929,7 +992,7 @@ func GenerateUUID() string
 ```
 
 **返回**:
-- `string`: UUID，格�?`XXXXXXXX-XXXX-4XXX-YXXX-XXXXXXXXXXXX`
+- `string`: UUID，格式 `XXXXXXXX-XXXX-4XXX-YXXX-XXXXXXXXXXXX`
 
 **示例**:
 ```go
@@ -941,20 +1004,22 @@ fmt.Println("UUID:", uuid)
 
 ### GenerateMachineCode
 
-生成机器�?
+生成机器码
+
 ```go
 func GenerateMachineCode(seed string) string
 ```
 
 **参数**:
-- `seed`: 种子字符串（如MAC地址�?
+- `seed`: 种子字符串（如MAC地址）
+
 **返回**:
 - `string`: 机器码，格式 `XXXX-XXXX-XXXX-XXXX`
 
 **示例**:
 ```go
 code := donghao.GenerateMachineCode("00:11:22:33:44:55")
-fmt.Println("机器�?", code)
+fmt.Println("机器码:", code)
 ```
 
 ---
@@ -1074,19 +1139,23 @@ func RSAPublicEncrypt(data string, publicKeyPEM string) (string, error)
 
 ```go
 const (
-    ENC_NONE   = 0 // 不加�?    ENC_RC4    = 1 // RC4加密
+    ENC_NONE   = 0 // 不加密
+    ENC_RC4    = 1 // RC4加密
     ENC_RSA    = 2 // RSA加密
     ENC_BASE64 = 3 // Base64编码
-    ENC_CUSTOM = 4 // 自定义加�?)
+    ENC_CUSTOM = 4 // 自定义加密
+)
 ```
 
 ---
 
 ## 错误处理
 
-所有API调用都返�?`(*Result, error)`�?
-- `error` 不为nil：表示HTTP请求失败（网络错误等�?- `error` 为nil�?`result.IsSuccess()` 为false：表示API返回错误（如密码错误、卡密无效等�?
-**建议的错误处理方�?*:
+所有API调用都返回 `(*Result, error)`:
+- `error` 不为nil：表示HTTP请求失败（网络错误等）
+- `error` 为nil但 `result.IsSuccess()` 为false：表示API返回错误（如密码错误、卡密无效等）
+
+**建议的错误处理方式**:
 
 ```go
 result, err := client.Login("user", "pwd", "1.0", "mac", "ip", "clientid")
@@ -1120,7 +1189,8 @@ import (
 )
 
 func main() {
-    // 创建客户�?    client := donghao.NewClient("http://your-domain.com", 1)
+    // 创建客户端
+    client := donghao.NewClient("http://your-domain.com", 1)
     client.SetTimeout(30)
     
     // 配置RC4加密
@@ -1133,9 +1203,10 @@ func main() {
     clientID := donghao.GenerateClientID()
     fmt.Println("客户端ID:", clientID)
     
-    // 软件初始�?    result, err := client.Init("1.0.0", "00:11:22:33:44:55", "192.168.1.100", clientID)
+    // 软件初始化
+    result, err := client.Init("1.0.0", "00:11:22:33:44:55", "192.168.1.100", clientID)
     if err != nil || !result.IsSuccess() {
-        log.Fatal("初始化失�?)
+        log.Fatal("初始化失败")
     }
     
     // 卡密登录
@@ -1150,7 +1221,8 @@ func main() {
     
     fmt.Println("登录成功，Token:", client.GetToken())
     
-    // 手动心跳（自动心跳已禁用�?    heartResult, _ := client.Heartbeat(client.GetCurrentUser(), client.GetToken(), "1.0.0", "00:11:22:33:44:55", "192.168.1.100", clientID)
+    // 手动心跳（自动心跳已禁用）
+    heartResult, _ := client.Heartbeat(client.GetCurrentUser(), client.GetToken(), "1.0.0", "00:11:22:33:44:55", "192.168.1.100", clientID)
     fmt.Println("心跳结果:", heartResult.IsSuccess())
     
     // 保持程序运行
