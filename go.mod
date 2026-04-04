@@ -1,4 +1,4 @@
-module gitee.com/yuan71058/dong-hao-verification
+module github.com/yuan71058/DONGHAO-GO-SDK
 
 go 1.25.0
 
