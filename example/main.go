@@ -20,6 +20,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	donghao "github.com/yuan71058/DONGHAO-GO-SDK"
 )
@@ -47,7 +48,7 @@ func main() {
 	exampleBlacklist(client)
 	exampleOtherFeatures(client)
 	exampleCloudFunctions(client)
-	// exampleAutoHeartbeat(client) // 自动心跳维持在线功能目前需要手动调用Heartbeat()
+	exampleAutoHeartbeat(client) // 自动心跳维持在线功能（基于context.Context）
 }
 
 // exampleDeviceID 展示设备信息采集功能
@@ -808,46 +809,59 @@ func exampleCloudFunctions(client *donghao.Client) {
 
 // exampleAutoHeartbeat 展示自动心跳维持在线功能
 //
-// 注意：此功能目前需要手动调用Heartbeat()方法实现。
-// 自动心跳维持在线功能可以帮助保持用户在线状态，
-// 无需手动定时调用心跳接口。
+// 自动心跳在后台goroutine中定时发送心跳请求，维持用户在线状态。
+// 使用 context.Context 实现优雅取消，支持错误回调。
 //
 // 使用方式：
-//   1. 调用 StartAutoHeartbeat 启动自动心跳
-//   2. 在程序退出前调用 StopAutoHeartbeat 停止心跳
-//
-// func exampleAutoHeartbeat(client *donghao.Client) {
-// 	fmt.Println("13. 自动心跳维持在线功能演示")
-// 	fmt.Println("----------------------------------------")
-//
-// 	// 启动自动心跳（需要先登录获取token）
-// 	result, err := client.StartAutoHeartbeat(
-// 		"testuser",
-// 		client.GetToken(),
-// 		"1.0.0",
-// 		"00:11:22:33:44:55",
-// 		"192.168.1.100",
-// 		"client001",
-// 	)
-//
-// 	if err != nil {
-// 		log.Printf("启动自动心跳错误: %v\n", err)
-// 		return
-// 	}
-//
-// 	if result.IsSuccess() {
-// 		fmt.Println("自动心跳已启动!")
-// 		fmt.Println("心跳将在后台自动运行...")
-//
-// 		// 模拟程序运行一段时间
-// 		time.Sleep(10 * time.Second)
-//
-// 		// 停止自动心跳
-// 		client.StopAutoHeartbeat()
-// 		fmt.Println("自动心跳已停止")
-// 	} else {
-// 		fmt.Printf("启动自动心跳失败: %s\n", result.Msg())
-// 	}
-//
-// 	fmt.Println()
-// }
+//   1. 登录成功后调用 StartAutoHeartbeat 启动（user/tokenid 可为空自动填充）
+//   2. 程序退出前调用 StopAutoHeartbeat 停止
+//   3. 可选：使用 IsHeartbeatRunning() 检查状态
+func exampleAutoHeartbeat(client *donghao.Client) {
+	fmt.Println("13. 自动心跳维持在线功能演示")
+	fmt.Println("----------------------------------------")
+
+	// 设置心跳间隔为10秒（演示用，实际建议60-300秒）
+	client.HeartbeatInterval = 10 * time.Second
+
+	// 方式一：基本用法（启动自动心跳，user/tokenid 为空时自动使用登录信息）
+	err := client.StartAutoHeartbeat(
+		"", // user: 为空自动使用 currentUser
+		"", // tokenid: 为空自动使用 currentToken
+		"1.0.0",
+		"00:11:22:33:44:55",
+		"192.168.1.100",
+		"client001",
+	)
+
+	if err != nil {
+		log.Printf("启动自动心跳错误: %v\n", err)
+		fmt.Println()
+		return
+	}
+
+	fmt.Println("✅ 自动心跳已启动!")
+	fmt.Printf("   心跳状态: %v\n", client.IsHeartbeatRunning())
+	fmt.Println("   心跳将在后台自动运行...")
+
+	// 模拟程序运行一段时间
+	time.Sleep(15 * time.Second)
+
+	fmt.Printf("   心跳状态: %v\n", client.IsHeartbeatRunning())
+
+	// 停止自动心跳
+	client.StopAutoHeartbeat()
+	fmt.Println("✅ 自动心跳已停止")
+	fmt.Printf("   心跳状态: %v\n", client.IsHeartbeatRunning())
+
+	fmt.Println()
+
+	// 方式二：带错误回调的高级用法
+	// err = client.StartAutoHeartbeatWithCallback("", "", "1.0.0", mac, ip, clientID,
+	// 	func(err error, count int) {
+	// 		log.Printf("[心跳告警] 连续失败%d次: %v\n", count, err)
+	// 		if count >= 3 {
+	// 			log.Println("[心跳告警] 连续失败超过3次，可能需要重新登录！")
+	// 		}
+	// 	},
+	// )
+}

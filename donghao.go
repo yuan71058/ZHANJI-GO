@@ -46,6 +46,7 @@
 package donghao
 
 import (
+	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
@@ -70,7 +71,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	// chacha20poly1305 "golang.org/x/crypto/chacha20poly1305" // 已禁用: OpenSSL 1.1.1 不支持AEAD Tag
@@ -95,9 +96,11 @@ type Client struct {
 	currentToken      string        // 当前登录token
 	currentUUID       string        // 当前客户端UUID
 	currentUser       string        // 当前登录用户名
-	heartbeatRunning  bool          // 心跳运行标志
-	heartbeatCancel   chan bool     // 心跳取消通道
-	heartbeatMutex    sync.Mutex    // 心跳互斥锁
+	hbCtx             context.Context // 心跳context（用于取消）
+	hbCancel          context.CancelFunc // 心跳取消函数
+	hbRunning         int32         // 心跳运行标志（原子操作，1=运行中）
+	hbParams          *heartbeatParams // 心跳参数缓存
+	hbOnError         HeartbeatErrorCallback // 心跳错误回调
 	httpClient        *http.Client  // HTTP客户端
 }
 
@@ -295,7 +298,6 @@ func NewClient(baseURL string, appID int) *Client {
 		EncryptionType:    ENC_NONE,
 		UseGBK:            true,
 		HeartbeatInterval: 150 * time.Second,
-		heartbeatCancel:   make(chan bool),
 		httpClient:        &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -1764,47 +1766,214 @@ func (c *Client) Relay(params map[string]string, ver, mac, ip, clientid string) 
 	return c.httpPost("relay", params)
 }
 
-// ==================== 自动心跳功能 - 已禁用 ====================
+// ==================== 自动心跳功能 ====================
 
-// StartAutoHeartbeat 启动自动心跳 - 已禁用
-// func (c *Client) StartAutoHeartbeat(user, tokenid, ver, mac, ip, clientid string) {
-// 	c.heartbeatMutex.Lock()
-// 	defer c.heartbeatMutex.Unlock()
+// heartbeatParams 心跳请求参数
 //
-// 	if c.heartbeatRunning {
-// 		c.StopAutoHeartbeat()
-// 	}
-//
-// 	c.heartbeatRunning = true
-// 	go c.heartbeatLoop(user, tokenid, ver, mac, ip, clientid)
-// }
+// 缓存自动心跳所需的全部参数，避免每次循环重新构建
+type heartbeatParams struct {
+	User     string // 用户名
+	TokenID  string // 登录Token
+	Ver      string // 软件版本号
+	Mac      string // 机器码
+	IP       string // IP地址
+	ClientID string // 客户端ID
+}
 
-// StopAutoHeartbeat 停止自动心跳 - 已禁用
-// func (c *Client) StopAutoHeartbeat() {
-// 	c.heartbeatMutex.Lock()
-// 	defer c.heartbeatMutex.Unlock()
+// HeartbeatErrorCallback 心跳错误回调函数类型
 //
-// 	if c.heartbeatRunning {
-// 		c.heartbeatRunning = false
-// 		close(c.heartbeatCancel)
-// 		c.heartbeatCancel = make(chan bool)
-// 	}
-// }
+// 当心跳请求失败时调用，可用于日志记录或重连处理
+//
+// 参数:
+//   - err: 错误信息
+//   - consecutiveFailures: 连续失败次数（从1开始）
+type HeartbeatErrorCallback func(err error, consecutiveFailures int)
 
-// heartbeatLoop 心跳循环（内部方法）- 已禁用
-// func (c *Client) heartbeatLoop(user, tokenid, ver, mac, ip, clientid string) {
-// 	ticker := time.NewTicker(c.HeartbeatInterval)
-// 	defer ticker.Stop()
+// StartAutoHeartbeat 启动自动心跳（后台goroutine定时发送心跳包）
 //
-// 	for {
-// 		select {
-// 		case <-ticker.C:
-// 			c.Heartbeat(user, tokenid, ver, mac, ip, clientid)
-// 		case <-c.heartbeatCancel:
-// 			return
-// 		}
-// 	}
-// }
+// 在后台启动一个goroutine，按 HeartbeatInterval 间隔自动发送心跳请求
+// 用于维持用户在线状态，防止会话过期
+//
+// 参数:
+//   - user: 用户名（为空时使用当前登录用户 currentUser）
+//   - tokenid: 登录Token（为空时使用当前Token currentToken）
+//   - ver: 软件版本号
+//   - mac: 机器码
+//   - ip: 客户端IP地址
+//   - clientid: 客户端ID
+//
+// 返回:
+//   - error: 如果心跳已在运行则返回错误
+//
+// 使用示例:
+//
+//	// 方式一：登录后启动自动心跳
+//	result, _ := client.Login("user", "pwd", "1.0", mac, ip, clientID)
+//	if result.IsSuccess() {
+//	    err := client.StartAutoHeartbeat("", "", "1.0", mac, ip, clientID)
+//	    if err != nil {
+//	        log.Println("启动心跳失败:", err)
+//	    }
+//	}
+//
+//	// 程序退出前停止
+//	defer client.StopAutoHeartbeat()
+//
+// 设计说明:
+//   - 使用 context.Context 实现优雅取消，解决旧版 chan bool 重复close问题
+//   - 使用 atomic.Int32 保证 hbRunning 标志的线程安全
+//   - 内部缓存参数，避免闭包捕获问题
+//   - 支持可选的错误回调函数
+func (c *Client) StartAutoHeartbeat(user, tokenid, ver, mac, ip, clientid string) error {
+	if atomic.LoadInt32(&c.hbRunning) == 1 {
+		return fmt.Errorf("自动心跳已在运行中，请先调用 StopAutoHeartbeat 停止")
+	}
+
+	if user == "" {
+		user = c.currentUser
+	}
+	if tokenid == "" {
+		tokenid = c.currentToken
+	}
+
+	c.hbParams = &heartbeatParams{
+		User:     user,
+		TokenID:  tokenid,
+		Ver:      ver,
+		Mac:      mac,
+		IP:       ip,
+		ClientID: clientid,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.hbCtx = ctx
+	c.hbCancel = cancel
+	atomic.StoreInt32(&c.hbRunning, 1)
+
+	go c.heartbeatLoop()
+
+	return nil
+}
+
+// StartAutoHeartbeatWithCallback 启动自动心跳（带错误回调）
+//
+// 与 StartAutoHeartbeat 功能相同，额外支持传入心跳失败时的回调函数
+//
+// 参数:
+//   - user: 用户名（为空时使用当前登录用户）
+//   - tokenid: 登录Token（为空时使用当前Token）
+//   - ver: 软件版本号
+//   - mac: 机器码
+//   - ip: 客户端IP地址
+//   - clientid: 客户端ID
+//   - onError: 心跳失败时的回调函数（可为nil）
+//
+// 返回:
+//   - error: 如果心跳已在运行则返回错误
+func (c *Client) StartAutoHeartbeatWithCallback(user, tokenid, ver, mac, ip, clientid string, onError HeartbeatErrorCallback) error {
+	c.hbOnError = onError
+	return c.StartAutoHeartbeat(user, tokenid, ver, mac, ip, clientid)
+}
+
+// StopAutoHeartbeat 停止自动心跳
+//
+// 安全地停止后台心跳goroutine：
+//   - 通过 context.Cancel 取消心跳循环
+//   - 等待goroutine退出（最多等待一次心跳超时时间）
+//   - 重置运行状态标志
+//   - 可多次调用不会panic（幂等操作）
+//
+// 使用示例:
+//
+//	defer client.StopAutoHeartbeat()
+func (c *Client) StopAutoHeartbeat() {
+	if atomic.LoadInt32(&c.hbRunning) != 1 {
+		return
+	}
+
+	if c.hbCancel != nil {
+		c.hbCancel()
+	}
+
+	atomic.StoreInt32(&c.hbRunning, 0)
+	c.hbCtx = nil
+	c.hbCancel = nil
+	c.hbParams = nil
+	c.hbOnError = nil
+}
+
+// IsHeartbeatRunning 检查自动心跳是否正在运行
+//
+// 返回:
+//   - bool: true=心跳正在运行，false=未运行
+func (c *Client) IsHeartbeatRunning() bool {
+	return atomic.LoadInt32(&c.hbRunning) == 1
+}
+
+// heartbeatLoop 心跳循环（内部方法，在独立goroutine中运行）
+//
+// 按 HeartbeatInterval 间隔循环发送心跳请求：
+//   - 首次立即发送一次心跳
+//   - 之后每隔 HeartbeatInterval 发送一次
+//   - 连续失败会通过回调通知（如果设置了 onError）
+//   - 收到 context 取消信号后自动退出
+//   - 内部 recover panic，防止心跳异常导致程序崩溃
+func (c *Client) heartbeatLoop() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[ERROR] 心跳goroutine panic恢复: %v\n", r)
+			atomic.StoreInt32(&c.hbRunning, 0)
+		}
+	}()
+
+	ticker := time.NewTicker(c.HeartbeatInterval)
+	defer ticker.Stop()
+
+	consecutiveFailures := 0
+
+	for {
+		select {
+		case <-c.hbCtx.Done():
+			fmt.Printf("[INFO] 自动心跳已停止\n")
+			return
+
+		case <-ticker.C:
+			if c.hbParams == nil {
+				fmt.Printf("[WARN] 心跳参数为空，跳过本次心跳\n")
+				continue
+			}
+
+			p := c.hbParams
+			result, err := c.Heartbeat(p.User, p.TokenID, p.Ver, p.Mac, p.IP, p.ClientID)
+
+			if err != nil {
+				consecutiveFailures++
+				fmt.Printf("[ERROR] 心跳失败(%d次): %v\n", consecutiveFailures, err)
+				c.notifyHeartbeatError(err, consecutiveFailures)
+			} else if result.IsSuccess() {
+				consecutiveFailures = 0
+				fmt.Printf("[DEBUG] 心跳成功 Token=%s\n", result.Token)
+			} else {
+				consecutiveFailures++
+				fmt.Printf("[WARN] 心跳返回失败(%d次): code=%d msg=%s\n",
+					consecutiveFailures, result.Code, result.Msg())
+				c.notifyHeartbeatError(
+					fmt.Errorf("心跳返回失败: code=%d msg=%s", result.Code, result.Msg()),
+					consecutiveFailures,
+				)
+			}
+		}
+	}
+}
+
+// notifyHeartbeatError 通知心跳错误（内部方法）
+//
+// 如果设置了错误回调函数，则调用它；否则静默忽略
+func (c *Client) notifyHeartbeatError(err error, count int) {
+	if c.hbOnError != nil {
+		c.hbOnError(err, count)
+	}
+}
 
 // IsSuccess 检查是否成功
 //
