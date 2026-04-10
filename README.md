@@ -2,7 +2,7 @@
 
 # 冬浩验证系统 - Go SDK
 
-![Version](https://img.shields.io/badge/version-1.1-blue.svg)
+![Version](https://img.shields.io/badge/version-1.2-blue.svg)
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8.svg?logo=go)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -16,11 +16,40 @@
 
 ## 更新日志
 
+### v1.2 (2026-04-10)
+
+#### 重大变更：Token 认证机制升级
+- **服务端改用随机 Token 替代数据库自增 ID**
+  - 登录时服务端生成随机 Token（MD5 格式）并存储到 `heartbeat.token` 字段
+  - 所有会话验证（心跳、注销、取常量等）改用 `token` 字段查询
+  - 客户端无需修改，SDK 已正确处理 Token 轮换机制
+
+#### 服务端变更
+| 文件 | 变更内容 |
+|------|----------|
+| `login.php` | 生成随机 Token 并返回 `tokenid` |
+| `heartbeat.php` | 使用 `token` 字段查询 |
+| `logout.php` | 使用 `token` 字段查询 |
+| `profiler.php` | 使用 `token` 字段查询 |
+| `constant.php` | 使用 `token` 字段查询 |
+| `other.php` | 添加 URL 解码功能 |
+
+#### 认证流程变化
+```
+之前: 登录返回数据库自增ID → 心跳使用ID查询
+现在: 登录生成随机Token → 心跳使用Token查询
+```
+
+#### 优势
+- 更安全：Token 随机生成，不易被猜测
+- 更灵活：Token 可随时更换，不依赖数据库 ID
+- 更兼容：Token 格式统一，便于跨系统集成
+
 ### v1.1 (2026-04-10)
 
 #### Bug 修复
 - **修复登录后心跳失败的问题**
-  - 问题原因：SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.tokenid`（数据库自增 ID）
+  - 问题原因：SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.tokenid`
   - 影响范围：所有加密模式（RC4/RSA/Base64/AES-GCM）下的登录和心跳功能
   - 修复方案：修改 `httpPost` 函数中的 Token 设置逻辑，优先使用 `result.tokenid`
 
@@ -40,12 +69,6 @@
   }
   ```
 
-#### 技术细节
-- 服务端登录响应包含两个字段：
-  - `result.tokenid`: 数据库自增 ID（数字类型），用于心跳验证
-  - `token`: MD5 hash 字符串，用于签名验证
-- 正确流程：客户端应使用 `tokenid` 作为心跳参数，而非 `token`
-
 ### v1.0 (2026-03-31)
 - 初始版本发布
 - 完整的 API 封装
@@ -61,6 +84,7 @@
 - **MD5 签名机制** - 确保请求安全性和数据完整性
 - **设备信息采集** - 机器码、硬件 ID 获取，支持 Windows/Android
 - **自动 Token 轮换** - 服务端返回新 Token 时自动更新
+- **随机 Token 认证** - 更安全的会话管理机制
 
 ---
 
@@ -197,7 +221,7 @@ type Result struct {
 |------|------|
 | `IsSuccess() bool` | 判断是否成功 |
 | `Msg() string` | 获取返回消息 |
-| `GetTokenID() string` | 获取 TokenID（数据库自增 ID） |
+| `GetTokenID() string` | 获取 TokenID（随机 Token） |
 | `GetData() (string, error)` | 获取用户数据（Base64 解码） |
 | `GetGroupData() (string, error)` | 获取分组数据（Base64 解码） |
 | `GetVariableValue() (string, error)` | 获取变量值（Base64 解码） |
