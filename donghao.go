@@ -73,7 +73,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
 	// chacha20poly1305 "golang.org/x/crypto/chacha20poly1305" // 已禁用: OpenSSL 1.1.1 不支持AEAD Tag
 )
 
@@ -81,27 +80,27 @@ import (
 //
 // 提供完整的API接口封装，包括用户管理、卡密管理、云变量操作等功能
 type Client struct {
-	BaseURL           string        // API服务器基础URL
-	AppID             int           // 软件ID（必填）
-	AppKey            string        // 应用密钥（用于签名）
-	SignTemplate      string        // 签名模板（如"[data]xxx[key]yyy"）
-	NeedSign          bool          // 是否需要签名
-	UseGBK            bool          // RC4加密是否使用GBK编码（与PHP兼容）
-	Timeout           time.Duration // HTTP请求超时时间
-	EncryptionType    int           // 加密类型
-	EncryptionKey     string        // 加密密钥（RC4/RSA/自定义加密时使用）
-	AesGcmKey         string        // AES-256-GCM密钥（ENC_AES_GCM模式使用，32字节）
+	BaseURL        string        // API服务器基础URL
+	AppID          int           // 软件ID（必填）
+	AppKey         string        // 应用密钥（用于签名）
+	SignTemplate   string        // 签名模板（如"[data]xxx[key]yyy"）
+	NeedSign       bool          // 是否需要签名
+	UseGBK         bool          // RC4加密是否使用GBK编码（与PHP兼容）
+	Timeout        time.Duration // HTTP请求超时时间
+	EncryptionType int           // 加密类型
+	EncryptionKey  string        // 加密密钥（RC4/RSA/自定义加密时使用）
+	AesGcmKey      string        // AES-256-GCM密钥（ENC_AES_GCM模式使用，32字节）
 	// ChaChaKey         string        // ChaCha20-Poly1305密钥 - 已禁用
-	HeartbeatInterval time.Duration // 心跳间隔
-	currentToken      string        // 当前登录token
-	currentUUID       string        // 当前客户端UUID
-	currentUser       string        // 当前登录用户名
-	hbCtx             context.Context // 心跳context（用于取消）
-	hbCancel          context.CancelFunc // 心跳取消函数
-	hbRunning         int32         // 心跳运行标志（原子操作，1=运行中）
-	hbParams          *heartbeatParams // 心跳参数缓存
+	HeartbeatInterval time.Duration          // 心跳间隔
+	currentToken      string                 // 当前登录token
+	currentUUID       string                 // 当前客户端UUID
+	currentUser       string                 // 当前登录用户名
+	hbCtx             context.Context        // 心跳context（用于取消）
+	hbCancel          context.CancelFunc     // 心跳取消函数
+	hbRunning         int32                  // 心跳运行标志（原子操作，1=运行中）
+	hbParams          *heartbeatParams       // 心跳参数缓存
 	hbOnError         HeartbeatErrorCallback // 心跳错误回调
-	httpClient        *http.Client  // HTTP客户端
+	httpClient        *http.Client           // HTTP客户端
 }
 
 // Result API返回结果结构体
@@ -322,8 +321,8 @@ func (c *Client) SetEncryption(encType int, key string) {
 	switch encType {
 	case ENC_AES_GCM:
 		c.AesGcmKey = key
-	// case ENC_CHACHA: // 已禁用
-	// 	c.ChaChaKey = key
+		// case ENC_CHACHA: // 已禁用
+		// 	c.ChaChaKey = key
 	}
 }
 
@@ -390,12 +389,12 @@ func (c *Client) GetCurrentUser() string {
 //
 // 返回客户端当前的完整登录状态，用于调试或界面展示
 type ClientStatus struct {
-	Token     string // 当前登录Token
-	UUID      string // 当前客户端UUID
-	User      string // 当前登录用户名
+	Token      string // 当前登录Token
+	UUID       string // 当前客户端UUID
+	User       string // 当前登录用户名
 	IsLoggedIn bool   // 是否已登录（Token非空）
-	BaseURL   string // API服务器地址
-	AppID     int    // 软件ID
+	BaseURL    string // API服务器地址
+	AppID      int    // 软件ID
 }
 
 // GetClientStatus 获取客户端完整状态
@@ -526,7 +525,9 @@ func (c *Client) httpPost(action string, params map[string]string) (*Result, err
 			return nil, err
 		}
 		// Token轮换机制：更新为服务端返回的新token和uuid
-		if result.Token != "" {
+		if tokenID := result.GetTokenID(); tokenID != "" {
+			c.currentToken = tokenID
+		} else if result.Token != "" {
 			c.currentToken = result.Token
 		}
 		if result.Uuid != "" {
@@ -544,7 +545,9 @@ func (c *Client) httpPost(action string, params map[string]string) (*Result, err
 	}
 
 	if plainResp.Data != nil {
-		if plainResp.Data.Token != "" {
+		if tokenID := plainResp.Data.GetTokenID(); tokenID != "" {
+			c.currentToken = tokenID
+		} else if plainResp.Data.Token != "" {
 			c.currentToken = plainResp.Data.Token
 		}
 		if plainResp.Data.Uuid != "" {
@@ -559,7 +562,9 @@ func (c *Client) httpPost(action string, params map[string]string) (*Result, err
 	}
 
 	// Token轮换机制：更新为服务端返回的新token和uuid
-	if result.Token != "" {
+	if tokenID := result.GetTokenID(); tokenID != "" {
+		c.currentToken = tokenID
+	} else if result.Token != "" {
 		c.currentToken = result.Token
 	}
 	if result.Uuid != "" {
@@ -896,18 +901,18 @@ func (c *Client) GetUser(user, tokenid, ver, mac, ip, clientid string) (*Result,
 //
 // 从 GetUser 接口返回的 result 中解析出的结构化数据
 type UserInfo struct {
-	Username    string `json:"user"`           // 用户名
-	Email       string `json:"email"`          // 邮箱
-	UserQQ      string `json:"userqq"`         // QQ号
-	EndTime     string `json:"endtime"`        // 到期时间
-	Point       int    `json:"point"`          // 剩余点数
-	GroupID     int    `json:"groupid"`        // 用户组ID
-	GroupName   string `json:"groupname"`      // 用户组名称
-	Status      string `json:"zt"`             // 状态（1=正常）
-	RegisterTime string `json:"regtime"`       // 注册时间
-	LoginTime   string `json:"logintime"`      // 最后登录时间
-	Referrer    string `json:"tjr"`            // 推荐人
-	RawData     string `json:"-"`              // 原始数据（Base64解码后）
+	Username     string `json:"user"`      // 用户名
+	Email        string `json:"email"`     // 邮箱
+	UserQQ       string `json:"userqq"`    // QQ号
+	EndTime      string `json:"endtime"`   // 到期时间
+	Point        int    `json:"point"`     // 剩余点数
+	GroupID      int    `json:"groupid"`   // 用户组ID
+	GroupName    string `json:"groupname"` // 用户组名称
+	Status       string `json:"zt"`        // 状态（1=正常）
+	RegisterTime string `json:"regtime"`   // 注册时间
+	LoginTime    string `json:"logintime"` // 最后登录时间
+	Referrer     string `json:"tjr"`       // 推荐人
+	RawData      string `json:"-"`         // 原始数据（Base64解码后）
 }
 
 // GetUserFullInfo 获取结构化用户信息
@@ -2630,9 +2635,9 @@ func GetMachineCodeSafe() string {
 // GetLocalIP 获取本机IP地址
 //
 // 按优先级尝试获取IP地址：
-//   1. 尝试通过UDP连接获取本地地址（最快）
-//   2. 获取所有网络接口的非回环IPv4地址
-//   3. 返回 "127.0.0.1" 作为兜底
+//  1. 尝试通过UDP连接获取本地地址（最快）
+//  2. 获取所有网络接口的非回环IPv4地址
+//  3. 返回 "127.0.0.1" 作为兜底
 //
 // 返回:
 //   - string: 本机IP地址，如 "192.168.1.100"

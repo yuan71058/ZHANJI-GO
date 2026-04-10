@@ -2,7 +2,7 @@
 
 # 冬浩验证系统 - Go SDK
 
-![Version](https://img.shields.io/badge/version-1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1-blue.svg)
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8.svg?logo=go)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -11,6 +11,46 @@
 [安装使用](#安装) | [快速开始](#快速开始) | [API 文档](#api-接口列表) | [示例代码](example/main.go)
 
 </div>
+
+---
+
+## 更新日志
+
+### v1.1 (2026-04-10)
+
+#### Bug 修复
+- **修复登录后心跳失败的问题**
+  - 问题原因：SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.tokenid`（数据库自增 ID）
+  - 影响范围：所有加密模式（RC4/RSA/Base64/AES-GCM）下的登录和心跳功能
+  - 修复方案：修改 `httpPost` 函数中的 Token 设置逻辑，优先使用 `result.tokenid`
+
+#### 代码变更
+- `donghao.go`: 修改 `httpPost` 函数中三处 Token 设置逻辑
+  ```go
+  // 修复前
+  if result.Token != "" {
+      c.currentToken = result.Token
+  }
+  
+  // 修复后
+  if tokenID := result.GetTokenID(); tokenID != "" {
+      c.currentToken = tokenID
+  } else if result.Token != "" {
+      c.currentToken = result.Token
+  }
+  ```
+
+#### 技术细节
+- 服务端登录响应包含两个字段：
+  - `result.tokenid`: 数据库自增 ID（数字类型），用于心跳验证
+  - `token`: MD5 hash 字符串，用于签名验证
+- 正确流程：客户端应使用 `tokenid` 作为心跳参数，而非 `token`
+
+### v1.0 (2026-03-31)
+- 初始版本发布
+- 完整的 API 封装
+- 支持多种加密方式
+- 设备信息采集功能
 
 ---
 
@@ -157,7 +197,7 @@ type Result struct {
 |------|------|
 | `IsSuccess() bool` | 判断是否成功 |
 | `Msg() string` | 获取返回消息 |
-| `GetTokenID() string` | 获取 TokenID |
+| `GetTokenID() string` | 获取 TokenID（数据库自增 ID） |
 | `GetData() (string, error)` | 获取用户数据（Base64 解码） |
 | `GetGroupData() (string, error)` | 获取分组数据（Base64 解码） |
 | `GetVariableValue() (string, error)` | 获取变量值（Base64 解码） |

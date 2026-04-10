@@ -1,8 +1,48 @@
 # 冬浩验证系统 - Go SDK API 文档
 
-**版本**: 1.0  
-**最后更新**: 2026-04-04  
+**版本**: 1.1  
+**最后更新**: 2026-04-10  
 **GitHub**: https://github.com/yuan71058/DONGHAO-GO-SDK
+
+---
+
+## 更新日志
+
+### v1.1 (2026-04-10)
+
+#### Bug 修复
+- **修复登录后心跳失败的问题**
+  - **问题原因**: SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.tokenid`（数据库自增 ID）
+  - **影响范围**: 所有加密模式（RC4/RSA/Base64/AES-GCM）下的登录和心跳功能
+  - **修复方案**: 修改 `httpPost` 函数中的 Token 设置逻辑，优先使用 `result.tokenid`
+
+#### 代码变更
+- `donghao.go`: 修改 `httpPost` 函数中三处 Token 设置逻辑
+  ```go
+  // 修复前
+  if result.Token != "" {
+      c.currentToken = result.Token
+  }
+  
+  // 修复后
+  if tokenID := result.GetTokenID(); tokenID != "" {
+      c.currentToken = tokenID
+  } else if result.Token != "" {
+      c.currentToken = result.Token
+  }
+  ```
+
+#### 技术细节
+- 服务端登录响应包含两个字段：
+  - `result.tokenid`: 数据库自增 ID（数字类型），用于心跳验证
+  - `token`: MD5 hash 字符串，用于签名验证
+- 正确流程：客户端应使用 `tokenid` 作为心跳参数，而非 `token`
+
+### v1.0 (2026-03-31)
+- 初始版本发布
+- 完整的 API 封装
+- 支持多种加密方式
+- 设备信息采集功能
 
 ---
 
