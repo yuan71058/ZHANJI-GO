@@ -1,42 +1,96 @@
 # 冬浩验证系统 - Go SDK API 文档
 
-**版本**: 1.1  
-**最后更新**: 2026-04-10  
+**版本**: 1.4  
+**最后更新**: 2026-04-11  
 **GitHub**: https://github.com/yuan71058/DONGHAO-GO-SDK
 
 ---
 
 ## 更新日志
 
+### v1.4 (2026-04-11)
+
+#### Bug 修复
+- **修复 httpPost token 参数被无条件覆盖的问题**
+  - 问题原因：`httpPost()` 在注入 `currentToken` 时，会覆盖 `Heartbeat()` 等方法手动传入的 `token` 参数
+  - 修复方案：添加 `params["token"] == ""` 判断，只在参数中没有 token 时才自动注入
+
+- **修复 heartbeatParams 字段命名误导**
+  - 字段名 `TokenID` 改为 `Token`，与实际用途保持一致
+
+#### 代码变更
+```go
+// httpPost - 修复前
+if c.currentToken != "" {
+    params["token"] = c.currentToken
+}
+
+// httpPost - 修复后
+if c.currentToken != "" && params["token"] == "" {
+    params["token"] = c.currentToken
+}
+
+// heartbeatParams - 修复前
+type heartbeatParams struct {
+    TokenID string // 登录Token
+}
+
+// heartbeatParams - 修复后
+type heartbeatParams struct {
+    Token string // 登录Token
+}
+```
+
+---
+
+### v1.3 (2026-04-10)
+
+#### 重大变更：统一使用 token 参数
+- **移除 tokenid 参数，统一使用 token**
+  - 所有 API 接口参数名从 `tokenid` 改为 `token`
+  - 服务端所有模块（login/heartbeat/logout/profiler/constant）统一使用 `token` 字段
+  - `GetTokenID()` 方法只读取 `token` 字段，不再兼容旧版 `tokenid`
+
+#### 变更文件
+| 文件 | 变更内容 |
+|------|----------|
+| `login.php` | 返回字段 `tokenid` → `token` |
+| `heartbeat.php` | 接收参数 `tokenid` → `token` |
+| `logout.php` | 接收参数 `tokenid` → `token` |
+| `profiler.php` | 接收参数 `tokenid` → `token` |
+| `constant.php` | 接收参数 `tokenid` → `token` |
+| `donghao.go` | 所有函数参数和请求参数改为 `token` |
+
+---
+
+### v1.2 (2026-04-10)
+
+#### 重大变更：Token 认证机制升级
+- **服务端改用随机 Token 替代数据库自增 ID**
+  - 登录时服务端生成随机 Token（MD5 格式）并存储到 `heartbeat.token` 字段
+  - 所有会话验证（心跳、注销、取常量等）改用 `token` 字段查询
+  - 客户端无需修改，SDK 已正确处理 Token 轮换机制
+
+#### 认证流程变化
+```
+之前: 登录返回数据库自增ID → 心跳使用ID查询
+现在: 登录生成随机Token → 心跳使用Token查询
+```
+
+#### 优势
+- **更安全**：Token 随机生成，不易被猜测
+- **更灵活**：Token 可随时更换，不依赖数据库 ID
+- **更兼容**：Token 格式统一，便于跨系统集成
+
+---
+
 ### v1.1 (2026-04-10)
 
 #### Bug 修复
 - **修复登录后心跳失败的问题**
-  - **问题原因**: SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.tokenid`（数据库自增 ID）
-  - **影响范围**: 所有加密模式（RC4/RSA/Base64/AES-GCM）下的登录和心跳功能
-  - **修复方案**: 修改 `httpPost` 函数中的 Token 设置逻辑，优先使用 `result.tokenid`
-
-#### 代码变更
-- `donghao.go`: 修改 `httpPost` 函数中三处 Token 设置逻辑
-  ```go
-  // 修复前
-  if result.Token != "" {
-      c.currentToken = result.Token
-  }
-  
-  // 修复后
-  if tokenID := result.GetTokenID(); tokenID != "" {
-      c.currentToken = tokenID
-  } else if result.Token != "" {
-      c.currentToken = result.Token
-  }
-  ```
-
-#### 技术细节
-- 服务端登录响应包含两个字段：
-  - `result.tokenid`: 数据库自增 ID（数字类型），用于心跳验证
-  - `token`: MD5 hash 字符串，用于签名验证
-- 正确流程：客户端应使用 `tokenid` 作为心跳参数，而非 `token`
+  - 问题原因：SDK 在解析响应时直接使用了顶层的 `token`（MD5 hash），而没有优先使用 `result.token`
+  - 影响范围：所有加密模式下的登录和心跳功能
+  - 修复方案：修改 `httpPost` 函数中的 Token 设置逻辑，优先使用 `result.token`
 
 ### v1.0 (2026-03-31)
 - 初始版本发布
@@ -332,14 +386,19 @@ func (r *Result) GetVariableValue() (string, error)
 
 ### GetTokenID
 
-获取Token ID。
+获取登录返回的 Token（从 result.token 字段读取）。
 
 ```go
 func (r *Result) GetTokenID() string
 ```
 
 **返回值**:
-- `string`: Token ID
+- `string`: 登录返回的随机 Token（MD5 格式，32位）
+
+**说明**（v1.2+）：
+- 此方法从 `result.token` 字段获取 Token
+- Token 由服务端登录时生成，存储在 heartbeat 表的 token 字段
+- 用于心跳、注销等需要会话验证的接口
 
 ---
 
@@ -436,7 +495,7 @@ result, err := client.Reg("newuser", "password", "CARD-123", "123456", "user@exa
 用户注销/退出登录。
 
 ```go
-func (c *Client) Logout(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) Logout(user, token, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -451,7 +510,7 @@ result, err := client.Logout("testuser", client.GetToken(), "1.0", "mac", "ip", 
 获取用户详细信息。
 
 ```go
-func (c *Client) GetUser(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) GetUser(user, token, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -487,7 +546,7 @@ result, err := client.Uppwd("testuser", "oldpwd", "newpwd", "1.0", "mac", "ip", 
 发送心跳包
 
 ```go
-func (c *Client) Heartbeat(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) Heartbeat(user, token, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -498,26 +557,87 @@ result, err := client.Heartbeat("testuser", client.GetToken(), "1.0", "mac", "ip
 ---
 
 ### StartAutoHeartbeat 启动自动心跳
-> **重要提示**: 自动心跳维持在线功能目前需要手动调用`Heartbeat()` 方法实现。
-手动发送心跳维持在线状态
 
+启动自动心跳维持在线功能（基于 context.Context 实现）。
+
+**函数签名**:
 ```go
-// func (c *Client) StartAutoHeartbeat(user, tokenid, ver, mac, ip, clientid string)
+func (c *Client) StartAutoHeartbeat(user, token, ver, mac, ip, clientid string) error
 ```
 
-**自动心跳使用示例**:
+**参数说明**:
+- `user`: 用户名，为空时自动使用 `currentUser`
+- `token`: 登录 Token，为空时自动使用 `currentToken`
+- `ver`: 软件版本号
+- `mac`: 设备机器码
+- `ip`: 客户端IP地址
+- `clientid`: 客户端ID
+
+**返回值**: `error` - 启动失败时返回错误
+
+**使用示例**:
 ```go
-result, err := client.Heartbeat("testuser", client.GetToken(), "1.0", "mac", "ip", "client001")
+// 基本用法：登录后启动自动心跳
+err := client.StartAutoHeartbeat(
+    "", // user: 为空自动填充
+    "", // token: 为空自动填充
+    "1.0.0",
+    donghao.GetMachineCodeSafe(),
+    donghao.GetLocalIP(),
+    donghao.GenerateClientID(),
+)
+
+// 检查状态
+if client.IsHeartbeatRunning() {
+    fmt.Println("心跳运行中")
+}
+
+// 停止心跳
+client.StopAutoHeartbeat()
 ```
 
----
+**高级用法（带错误回调）**:
+```go
+err := client.StartAutoHeartbeatWithCallback(
+    "",
+    "",
+    "1.0.0",
+    mac,
+    ip,
+    clientID,
+    func(err error, count int) {
+        log.Printf("⚠️ 心跳连续失败(%d次): %v\n", count, err)
+        if count >= 3 {
+            log.Println("🔴 连续失败超过3次，建议重新登录！")
+        }
+    },
+)
+```
 
 ### StopAutoHeartbeat 停止自动心跳
-停止自动心跳维持在线状态
+
+停止后台运行的自动心跳 goroutine。
 
 ```go
-// func (c *Client) StopAutoHeartbeat()
+func (c *Client) StopAutoHeartbeat()
 ```
+
+**使用示例**:
+```go
+client.StopAutoHeartbeat()
+fmt.Println("心跳已停止")
+```
+
+### IsHeartbeatRunning 检查心跳状态
+
+检查当前是否有自动心跳在运行。
+
+```go
+func (c *Client) IsHeartbeatRunning() bool
+```
+
+**返回值**:
+- `bool`: true 表示心跳正在运行
 
 ---
 
@@ -583,7 +703,7 @@ result, err := client.Binding("testuser", "password", "newuser", "newmac", "newi
 获取用户数据
 
 ```go
-func (c *Client) GetUdata(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) GetUdata(user, token, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -602,7 +722,7 @@ if result.IsSuccess() {
 设置用户数据
 
 ```go
-func (c *Client) SetUdata(user, tokenid, udata, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) SetUdata(user, token, udata, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -618,7 +738,7 @@ result, err := client.SetUdata("testuser", client.GetToken(), jsonData, "1.0", "
 获取用户数据2（独立存储空间，与GetUdata互不影响）
 
 ```go
-func (c *Client) GetUdata2(user, tokenid, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) GetUdata2(user, token, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -628,7 +748,7 @@ func (c *Client) GetUdata2(user, tokenid, ver, mac, ip, clientid string) (*Resul
 设置用户数据2（独立存储空间，与SetUdata互不影响）
 
 ```go
-func (c *Client) SetUdata2(user, tokenid, udata, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) SetUdata2(user, token, udata, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -639,7 +759,7 @@ func (c *Client) SetUdata2(user, tokenid, udata, ver, mac, ip, clientid string) 
 获取云变量
 
 ```go
-func (c *Client) GetVariable(user, tokenid, cloudkey, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) GetVariable(user, token, cloudkey, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -658,7 +778,7 @@ if result.IsSuccess() {
 设置云变量
 
 ```go
-func (c *Client) SetVariable(user, tokenid, cloudkey, cloudvalue, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) SetVariable(user, token, cloudkey, cloudvalue, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -673,7 +793,7 @@ result, err := client.SetVariable("testuser", client.GetToken(), "config_key", `
 删除云变量
 
 ```go
-func (c *Client) DelVariable(user, tokenid, cloudkey, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) DelVariable(user, token, cloudkey, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -683,7 +803,7 @@ func (c *Client) DelVariable(user, tokenid, cloudkey, ver, mac, ip, clientid str
 获取云常量（只读常量）
 
 ```go
-func (c *Client) Constant(user, tokenid, cloudkey, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) Constant(user, token, cloudkey, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -694,7 +814,7 @@ func (c *Client) Constant(user, tokenid, cloudkey, ver, mac, ip, clientid string
 调用云计算函数 - 需要已登录状态才能调用。
 
 ```go
-func (c *Client) Func(user, tokenid, fun, para, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) Func(user, token, fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 **使用示例**:
@@ -727,7 +847,7 @@ result, err := client.Func2("jia", "1,2", "1.0", "mac", "ip", "client001")
 调用PHP函数 - 需要已登录状态才能调用。
 
 ```go
-func (c *Client) CallPHP(user, tokenid, fun, para, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) CallPHP(user, token, fun, para, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -829,7 +949,7 @@ func (c *Client) AddLog(user, infos, ver, mac, ip, clientid string) (*Result, er
 扣除积分
 
 ```go
-func (c *Client) DeductPoints(user, tokenid string, sl int, ver, mac, ip, clientid string) (*Result, error)
+func (c *Client) DeductPoints(user, token string, sl int, ver, mac, ip, clientid string) (*Result, error)
 ```
 
 ---
@@ -1018,6 +1138,60 @@ func GenerateDeviceID() string
 ```go
 deviceID := donghao.GenerateDeviceID()
 fmt.Println("设备ID:", deviceID)
+```
+
+---
+
+## Token 认证机制（v1.2+）
+
+### 概述
+
+从 v1.2 版本开始，冬浩验证系统采用**随机 Token** 替代数据库自增 ID 进行会话认证。
+
+### Token 流程
+
+```
+┌──────────┐    登录请求     ┌────────────┐
+│   客户端  │ ──────────────> │   服务端    │
+│          │                 │            │
+│          │ <────────────── │ 生成随机Token│
+│          │   返回Token      │ (MD5格式)   │
+└────┬─────┘                 └──────┬─────┘
+     │                               │
+     │ 存储 currentToken             │ 存入heartbeat.token
+     ▼                               ▼
+┌──────────┐                 ┌────────────┐
+│ 后续API  │ ── token参数──> │   验证Token  │
+│ 调用     │                 │            │
+└──────────┘                 └────────────┘
+```
+
+### SDK 自动管理
+
+SDK 会自动处理 Token 的存储和传递：
+
+1. **登录时自动保存**: `Login()` / `LoginCard()` 成功后自动将 Token 存入 `currentToken`
+2. **心跳时自动传递**: `StartAutoHeartbeat("", "", ...)` 中 user/token 为空时自动填充
+3. **手动获取**: 通过 `client.GetToken()` 获取当前 Token
+
+### 使用示例
+
+```go
+// 登录 - 自动获取并保存 Token
+result, err := client.LoginCard("CARD-KEY", "1.0", mac, ip, clientID)
+if result.IsSuccess() {
+    fmt.Println("Token:", client.GetToken()) // 自动获取
+}
+
+// 心跳 - 自动使用登录的 Token
+err = client.StartAutoHeartbeat(
+    "", // user: 空 → 自动填充 currentUser
+    "", // token: 空 → 自动填充 currentToken
+    "1.0", mac, ip, clientID,
+)
+
+// 手动调用 API - 显式传入 Token
+result, err := client.GetUser("user", client.GetToken(), "1.0", mac, ip, clientID)
 ```
 
 ---
