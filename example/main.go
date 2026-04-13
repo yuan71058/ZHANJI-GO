@@ -38,7 +38,8 @@ func main() {
 	// 按顺序执行各种功能示例
 	exampleInit(client)
 	exampleLogin(client)
-	exampleLoginCard(client) // 卡密登录示例
+	exampleLoginCard(client)    // 卡密登录示例
+	exampleCardFullFlow(client) // 完整卡密使用流程（注册卡、卡密充值、卡密登录）
 	exampleRegister(client)
 	exampleHeartbeat(client)
 	exampleGetUser(client)
@@ -48,8 +49,8 @@ func main() {
 	exampleBlacklist(client)
 	exampleOtherFeatures(client)
 	exampleCloudFunctions(client)
-	// exampleAutoHeartbeat(client) // 自动心跳维持在线功能（基于context.Context）
-	// exampleFullFlow()            // 完整实战流程（卡密登录 + 自动心跳）
+	exampleAutoHeartbeat(client) // 自动心跳维持在线功能（基于context.Context）
+	exampleFullFlow()            // 完整实战流程（卡密登录 + 自动心跳）
 }
 
 // exampleDeviceID 展示设备信息采集功能
@@ -250,6 +251,91 @@ func exampleLoginCard(client *donghao.Client) {
 	fmt.Println()
 }
 
+// exampleCardFullFlow 展示完整的卡密使用流程
+//
+// 卡密的三种使用方式：
+//  1. 注册时绑定卡密 - 新用户注册时使用卡密直接充值
+//  2. 卡密充值 - 已有账号的用户使用卡密充值
+//  3. 卡密登录 - 直接用卡密登录（需后台开启dl_type=1）
+//
+// 适用场景：
+//   - 发卡平台销售
+//   - 代理分销
+//   - 会员充值
+func exampleCardFullFlow(client *donghao.Client) {
+	fmt.Println("4.5 完整卡密使用流程演示")
+	fmt.Println("----------------------------------------")
+
+	cardKey := "CARD-DEMO-123456"
+	ver := "1.0.0"
+	mac := donghao.GetMachineCodeSafe()
+	ip := donghao.GetLocalIP()
+	clientID := donghao.GenerateClientID()
+
+	fmt.Println("=== 方式一：注册时绑定卡密 ===")
+	fmt.Println("适用于：新用户首次注册，卡密直接充值到新账号")
+
+	result1, err := client.Reg(
+		"newuser_card",
+		"password123",
+		cardKey,
+		"123456",
+		"newuser@example.com",
+		"",
+		ver, mac, ip, clientID,
+	)
+	if err != nil {
+		log.Printf("注册错误: %v\n", err)
+	} else if result1.IsSuccess() {
+		fmt.Printf("✅ 注册成功（卡密已自动充值）: %v\n", result1.Data)
+	} else {
+		fmt.Printf("❌ 注册失败: %s\n", result1.Msg())
+	}
+
+	fmt.Println("\n=== 方式二：卡密充值 ===")
+	fmt.Println("适用于：已有账号的用户使用卡密充值续费")
+
+	result2, err := client.Recharge(
+		"existing_user",
+		cardKey,
+		ver, mac, ip, clientID,
+	)
+	if err != nil {
+		log.Printf("充值错误: %v\n", err)
+	} else if result2.IsSuccess() {
+		fmt.Printf("✅ 卡密充值成功: %v\n", result2.Data)
+	} else {
+		fmt.Printf("❌ 充值失败: %s\n", result2.Msg())
+	}
+
+	fmt.Println("\n=== 方式三：卡密登录 ===")
+	fmt.Println("适用于：发卡平台销售，用户直接用卡密登录")
+	fmt.Println("注意：需要后台开启「充值卡登录模式」(dl_type=1)")
+
+	client2 := donghao.NewClient("http://your-domain.com", 1)
+	result3, err := client2.LoginCard(cardKey, ver, mac, ip, clientID)
+	if err != nil {
+		log.Printf("卡密登录错误: %v\n", err)
+	} else if result3.IsSuccess() {
+		fmt.Printf("✅ 卡密登录成功!\n")
+		fmt.Printf("   用户名: %s\n", client2.GetCurrentUser())
+		fmt.Printf("   Token: %s\n", client2.GetToken())
+
+		if m := result3.GetResultMap(); m != nil {
+			if endtime, ok := m["endtime"].(string); ok {
+				fmt.Printf("   到期时间: %s\n", endtime)
+			}
+			if point, ok := m["point"].(float64); ok {
+				fmt.Printf("   剩余点数: %.0f\n", point)
+			}
+		}
+	} else {
+		fmt.Printf("❌ 卡密登录失败: %s\n", result3.Msg())
+	}
+
+	fmt.Println()
+}
+
 // exampleRegister 展示用户注册功能
 //
 // 注册需要填写的信息包括：
@@ -301,13 +387,17 @@ func exampleRegister(client *donghao.Client) {
 //   - 定期向服务器发送心跳包以保持账号在线状态
 //   - 建议间隔时间根据业务需求设置，通常为60-300秒
 //   - 心跳失败会导致用户自动下线
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值（client.GetCurrentUser()/client.GetToken()）
+//   - 如果未登录，需要先调用 Login 或 LoginCard
 func exampleHeartbeat(client *donghao.Client) {
 	fmt.Println("5. 心跳维持在线功能演示")
 	fmt.Println("----------------------------------------")
 
 	result, err := client.Heartbeat(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"1.0.0",
 		"00:11:22:33:44:55",
 		"192.168.1.100",
@@ -335,13 +425,16 @@ func exampleHeartbeat(client *donghao.Client) {
 // 该功能用于获取用户的详细账户信息，
 //
 //	包括用户名、到期时间、会员等级等信息
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值
 func exampleGetUser(client *donghao.Client) {
 	fmt.Println("6. 获取用户信息功能演示")
 	fmt.Println("----------------------------------------")
 
 	result, err := client.GetUser(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"1.0.0",
 		"00:11:22:33:44:55",
 		"192.168.1.100",
@@ -370,6 +463,9 @@ func exampleGetUser(client *donghao.Client) {
 //   - 存储自定义的用户配置或游戏进度等数据
 //   - 数据会经过Base64编码后存储在服务器上
 //   - 支持两组独立的数据存储空间
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值
 func exampleUserData(client *donghao.Client) {
 	fmt.Println("7. 用户数据存储功能演示")
 	fmt.Println("----------------------------------------")
@@ -378,8 +474,8 @@ func exampleUserData(client *donghao.Client) {
 	data := `{"settings": {"theme": "dark", "language": "zh-CN"}}`
 
 	result, err := client.SetUdata(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		data,
 		"1.0.0",
 		"00:11:22:33:44:55",
@@ -397,8 +493,8 @@ func exampleUserData(client *donghao.Client) {
 
 	fmt.Println("\n7.2 获取用户数据")
 	userData, err := client.GetUdata(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"1.0.0",
 		"00:11:22:33:44:55",
 		"192.168.1.100",
@@ -421,6 +517,9 @@ func exampleUserData(client *donghao.Client) {
 // 云变量的作用：
 //   - 允许服务端动态控制客户端行为
 //   - 可以通过后台修改云变量值来实时更新客户端配置
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值
 func exampleVariable(client *donghao.Client) {
 	fmt.Println("8. 云变量操作功能演示")
 	fmt.Println("----------------------------------------")
@@ -429,8 +528,8 @@ func exampleVariable(client *donghao.Client) {
 	varData := `{"key": "value", "config": "test"}`
 
 	result, err := client.SetVariable(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"config",
 		varData,
 		"1.0.0",
@@ -449,8 +548,8 @@ func exampleVariable(client *donghao.Client) {
 
 	fmt.Println("\n8.2 获取云变量")
 	value, err := client.GetVariable(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"config",
 		"1.0.0",
 		"00:11:22:33:44:55",
@@ -474,8 +573,8 @@ func exampleVariable(client *donghao.Client) {
 
 	fmt.Println("\n8.3 删除云变量")
 	result2, err := client.DelVariable(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"config",
 		"1.0.0",
 		"00:11:22:33:44:55",
@@ -499,13 +598,16 @@ func exampleVariable(client *donghao.Client) {
 // 常量的特点：
 //   - 常量只能由后台设置，客户端只能读取
 //   - 适用于固定不变的配置项
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值
 func exampleConstant(client *donghao.Client) {
 	fmt.Println("9. 获取云常量功能演示")
 	fmt.Println("----------------------------------------")
 
 	result, err := client.Constant(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"test_key",
 		"1.0.0",
 		"00:11:22:33:44:55",
@@ -663,8 +765,8 @@ func exampleOtherFeatures(client *donghao.Client) {
 
 	fmt.Println("\n11.5 扣除积分")
 	result5, err := client.DeductPoints(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		10,
 		"1.0.0",
 		"00:11:22:33:44:55",
@@ -726,14 +828,17 @@ func exampleOtherFeatures(client *donghao.Client) {
 //   - 在服务端执行预定义的计算逻辑
 //   - 支持带参数的函数调用
 //   - 可用于实现复杂的业务逻辑
+//
+// 注意：
+//   - user 和 token 参数使用登录后保存的值
 func exampleCloudFunctions(client *donghao.Client) {
 	fmt.Println("12. 云计算函数调用功能演示")
 	fmt.Println("----------------------------------------")
 
 	fmt.Println("12.1 带用户信息的云计算函数调用")
 	result, err := client.Func(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"jia",
 		"1,2",
 		"1.0.0",
@@ -770,8 +875,8 @@ func exampleCloudFunctions(client *donghao.Client) {
 
 	fmt.Println("\n12.3 调用PHP函数（需要登录）")
 	result3, err := client.CallPHP(
-		"testuser",
-		"token123",
+		client.GetCurrentUser(),
+		client.GetToken(),
 		"test_func",
 		"param1,param2",
 		"1.0.0",
